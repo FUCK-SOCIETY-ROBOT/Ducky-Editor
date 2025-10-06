@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="fa" dir="ltr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ducky Editor — Only DuckyScript</title>
+<style>
+:root{
+  --primary-gray:#2d3748;
+  --dark-gray:#1a202c;
+  --light-gray:#4a5568;
+  --accent-orange:#ed8936;
+  --light-orange:#fbd38d;
+  --text-light:#e2e8f0;
+  --text-dark:#1a202c;
+  --err-red:#ff6b6b;
+  --ok-green:#48bb78;
+  --cmd-blue:#4299e1;
+  --cmd-purple:#9f7aea;
+  --cmd-pink:#ed64a6;
+  --cmd-yellow:#ecc94b;
+  --cmd-fblue:#63b3ed;
+}
+@font-face {
+  font-family: "vazir-bold";
+  src: url("./font/Vazir-Bold.woff2");
+}
+/* reset & base */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--dark-gray);
+  color:var(--text-light);
+  font-family:"Vazirmatn","Roboto Mono",monospace;
+  padding:15px;
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+}
+/* container */
+.app{
+  width:100%;
+  max-width:1100px;
+  display:flex;
+  flex-direction:column;
+  gap:15px;
+}
+/* header */
+.header{
+  background:var(--primary-gray);
+  padding:14px;
+  border-radius:10px;
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.title{color:var(--accent-orange);font-weight:700;font-size:1.15rem;margin: auto;}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin: auto;}
+.btn{
+  background:var(--accent-orange);
+  color:var(--text-dark);
+  border:none;padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer;
+  box-shadow:0 3px 10px rgba(0,0,0,.25);
+  width: 162px;
+  font-family: vazir-bold;
+}
+.btn:hover{background:var(--light-orange);transform:translateY(-1px)}
+/* editor container */
+.editor-container{
+  background:var(--primary-gray);
+  border-radius:10px;
+  overflow:hidden;
+  box-shadow:0 6px 20px rgba(0,0,0,.3);
+  display:flex;
+  flex-direction:column;
+}
+.editor-header{
+  background:var(--light-gray);
+  padding:10px 14px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+}
+.file-name{background:transparent;border:1px solid var(--accent-orange);color:var(--text-light);padding:6px 10px;border-radius:6px;width:220px}
+
+/* main editor area: line numbers + editor */
+.editor-area{
+  display:flex;
+  height:62vh;
+  min-height:300px;
+  max-height:80vh;
+  overflow:hidden;
+}
+.line-numbers{
+  background:var(--dark-gray);
+  color:var(--accent-orange);
+  padding:14px 8px;
+  text-align:right;
+  font-family:'Roboto Mono',monospace;
+  font-size:13px;
+  line-height:1.5;
+  user-select:none;
+  border-right:1px solid rgba(255,255,255,.05);
+  min-width:48px;
+  overflow:hidden;
+}
+.editor-main{
+  position:relative;
+  flex:1;
+  overflow:auto;
+  background:transparent;
+}
+/* textarea (input) */
+#editor{
+  position:relative;
+  width:100%;
+  height:100%;
+  padding:14px;
+  font-family:'Roboto Mono',monospace;
+  font-size:14px;
+  line-height:1.5;
+  background:transparent;
+  color:transparent; /* keep caret visible */
+  caret-color:var(--text-light);
+  border:0;outline:0;resize:none;tab-size:4;
+  z-index:2;
+  white-space:pre-wrap;
+  word-break:break-word;
+  overflow:auto;
+}
+/* highlighted layer below textarea */
+#highlighting{
+  position:absolute;inset:0;padding:14px;font-family:'Roboto Mono',monospace;font-size:14px;line-height:1.5;
+  background:transparent;color:var(--light-orange);white-space:pre-wrap;word-break:break-word;z-index:1;pointer-events:none;overflow:hidden;
+}
+#creatorMsg{
+  width: 300px;
+}
+/* autocomplete popup */
+.autocomplete{
+  position:fixed;display:none;background:var(--primary-gray);border:1px solid var(--accent-orange);
+  border-radius:8px;max-height:240px;overflow-y:auto;z-index:9999;box-shadow:0 8px 26px rgba(0,0,0,.5);
+  min-width:200px;
+}
+.autocomplete-item{
+  padding:8px 10px;font-family:'Roboto Mono';cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);
+}
+.autocomplete-item:hover,.autocomplete-item.active{background:var(--accent-orange);color:var(--text-dark)}
+.autocomplete-item.exit-item{background:transparent;color:var(--text-light);font-weight:700;text-align:center}
+
+/* syntax colors */
+.span-rem{color:var(--err-red);font-style:normal;}
+.span-delay{color:var(--cmd-purple);}
+.span-gui{color:var(--cmd-blue);}
+.span-shift{color:var(--cmd-pink);}
+.span-arrow{color:var(--cmd-yellow);}
+.span-f{color:var(--cmd-fblue);}
+.quote{color:var(--light-orange);}
+.str-content{color:var(--ok-green);}
+.span-unknown{color:var(--err-red);text-decoration:underline dotted 1px;}
+
+/* status & suggestions & errors */
+.status-bar{background:var(--light-gray);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:.9rem}
+.suggestions{background:var(--primary-gray);padding:12px;border-radius:8px}
+.commands-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:8px}
+.command-item{background:var(--light-gray);padding:8px;border-radius:6px;cursor:pointer;font-size:.9rem;text-align:center}
+.command-item:hover{background:var(--accent-orange);color:var(--text-dark)}
+
+/* errors panel */
+.errors-panel{
+  margin-top:10px;background:rgba(255,255,255,0.02);border-left:4px solid var(--err-red);padding:10px 12px;border-radius:6px;color:var(--text-light);font-size:.95rem;
+}
+.errors-panel h4{color:var(--err-red);margin-bottom:6px;font-weight:700}
+/* responsive tweaks */
+@media(max-width:1024px){
+  .file-name{width:180px}
+  .line-numbers{font-size:12px;min-width:40px}
+}
+@media(max-width:768px){
+  .header{flex-direction:column;align-items:flex-start;gap:8px}
+  .editor-area{height:58vh}
+  .file-name{width:100%}
+  .commands-list{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+}
+@media(max-width:420px){
+  .line-numbers{min-width:36px;padding:10px}
+  #editor{font-size:13px;padding:10px}
+  #highlighting{font-size:13px;padding:10px}
+  .btn{padding:8px 12px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="title">Duckyscript Editor</div>
+    <div class="controls">
+      <button id="creatorBtn" class="btn">سازنده</button>
+      <button id="downloadBtn" class="btn">دانلود فایل</button>
+    </div>
+  </div>
+
+  <div class="editor-container">
+    <div class="editor-header">
+      <h3 style="margin:0;color:var(--text-light);">Code Editor</h3>
+      <input id="fileName" class="file-name" value="script.duck" />
+    </div>
+
+    <div class="editor-area" role="region" aria-label="Ducky editor">
+      <div class="line-numbers" id="lineNumbers">1</div>
+      <div class="editor-main">
+        <textarea id="editor" placeholder="Write your Duckyscript code here..."></textarea>
+        <div id="highlighting" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div id="charCount">0 characters</div>
+      <div id="status">Ready</div>
+    </div>
+
+    <!-- errors panel -->
+    <div id="errors" class="errors-panel" style="display:none">
+      <h4>⚠ Syntax Errors</h4>
+      <div id="errorsList"></div>
+    </div>
+
+    <div class="suggestions">
+      <strong style="color:var(--accent-orange)">Duckyscript Commands</strong>
+      <div class="commands-list" id="commandsList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- creator message -->
+<div id="creatorMsg" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent-orange);color:var(--text-dark);padding:9px 16px;border-radius:28px;display:none;z-index:9999;font-weight:700">
+  ساخته شده توسط تیم مسترک دارک
+</div>
+
+<!-- autocomplete popup (separate so we can position) -->
+<div id="autocomplete" class="autocomplete" role="listbox" aria-expanded="false" style="display:none"></div>
+
+<script>
+/* ---------- config: commands + types ---------- */
+const duckyCommands = [
+  "REM","STRING","DELAY","DEFAULT_DELAY","DEFAULTDELAY","GUI","WINDOWS","MENU","APP",
+  "SHIFT","ALT","CONTROL","CTRL","DOWNARROW","DOWN","LEFTARROW","LEFT","RIGHTARROW",
+  "RIGHT","UPARROW","UP","ENTER","ESCAPE","ESC","DELETE","END","HOME","INSERT","NUMLOCK",
+  "PAGEUP","PAGEDOWN","PAUSE","PRINTSCREEN","SCROLLLOCK","SPACE","TAB","CAPSLOCK",
+  "F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12","REPEAT"
+];
+const cmdSet = new Set(duckyCommands.map(c=>c.toUpperCase()));
+
+// **Only DELAY is strictly numeric now.**
+const commandsWithNumber = new Set(["DELAY"]);
+
+// commands that accept rest-of-line as text (no validation)
+const commandsAcceptText = new Set(["REM","STRING"]);
+
+/* ---------- cached DOM ---------- */
+const editor = document.getElementById('editor');
+const highlighting = document.getElementById('highlighting');
+const lineNumbers = document.getElementById('lineNumbers');
+const commandsList = document.getElementById('commandsList');
+const charCount = document.getElementById('charCount');
+const status = document.getElementById('status');
+const errorsPanel = document.getElementById('errors');
+const errorsList = document.getElementById('errorsList');
+const autocomplete = document.getElementById('autocomplete');
+const creatorBtn = document.getElementById('creatorBtn');
+const creatorMsg = document.getElementById('creatorMsg');
+
+/* ---------- helpers ---------- */
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function getSpanClassForToken(tokUpper){
+  if(tokUpper==="REM") return 'span-rem';
+  if(tokUpper.includes('DELAY')) return 'span-delay';
+  if(['GUI','WINDOWS','MENU','APP'].includes(tokUpper)) return 'span-gui';
+  if(['SHIFT','ALT','CONTROL','CTRL'].includes(tokUpper)) return 'span-shift';
+  if(tokUpper.includes('ARROW') || ['DOWN','UP','LEFT','RIGHT','ENTER','ESC','SPACE','TAB'].includes(tokUpper)) return 'span-arrow';
+  if(/^F\d+$/.test(tokUpper)) return 'span-f';
+  return '';
+}
+
+/* ---------- syntax analysis + highlighting (DELAY-only validation) ---------- */
+function analyzeAndHighlight(){
+  const text = editor.value;
+  const lines = text.split(/\r?\n/);
+  let html = '';
+  let errors = [];
+
+  for(let li=0; li<lines.length; li++){
+    const line = lines[li];
+    // split tokens while preserving quoted strings
+    const parts = line.match(/"[^"]*"|'[^']*'|\S+/g) || [];
+    let pos = 0;
+    let rebuilt = '';
+    let p = 0;
+
+    while(p < parts.length){
+      const tok = parts[p];
+      const startIndex = line.indexOf(tok, pos);
+      // append whitespace between tokens
+      if(startIndex > pos){
+        rebuilt += escapeHtml(line.substring(pos, startIndex));
+      }
+      pos = startIndex + tok.length;
+
+      // quoted string -> keep as string
+      if((tok.startsWith('"') && tok.endsWith('"')) || (tok.startsWith("'") && tok.endsWith("'"))){
+        const qOpen = `<span class="quote">${escapeHtml(tok[0])}</span>`;
+        const inner = tok.substring(1, tok.length-1);
+        const qContent = `<span class="str-content">${escapeHtml(inner)}</span>`;
+        const qClose = `<span class="quote">${escapeHtml(tok[tok.length-1])}</span>`;
+        rebuilt += qOpen + qContent + qClose;
+        p++;
+        continue;
+      }
+
+      // non-quoted: separate leading/trailing punctuation to find core
+      const leadMatch = tok.match(/^[^A-Za-z0-9_]*/)[0] || '';
+      const trailMatch = tok.match(/[^A-Za-z0-9_]*$/)[0] || '';
+      const core = tok.substring(leadMatch.length, tok.length - trailMatch.length);
+
+      if(core.length === 0){
+        rebuilt += escapeHtml(tok);
+        p++;
+        continue;
+      }
+
+      const coreUpper = core.toUpperCase();
+
+      // REM / STRING: accept rest of line as text (no errors)
+      if(commandsAcceptText.has(coreUpper)){
+        const cls = getSpanClassForToken(coreUpper) || '';
+        rebuilt += escapeHtml(leadMatch) + (cls ? `<span class="${cls}">${escapeHtml(core)}</span>` : `<span>${escapeHtml(core)}</span>`);
+        // take the rest of the original line after this token (preserve spacing)
+        const afterPos = startIndex + tok.length;
+        const rest = line.substring(afterPos);
+        if(rest.length > 0){
+          rebuilt += ' ' + `<span class="str-content">${escapeHtml(rest.replace(/^\s+/,''))}</span>`;
+        }
+        pos = line.length;
+        break;
+      }
+
+      // If token is a recognized command:
+      if(cmdSet.has(coreUpper)){
+        // Only validate numeric requirement for commandsWithNumber (now only DELAY)
+        if(commandsWithNumber.has(coreUpper)){
+          const nextTok = parts[p+1];
+          if(!nextTok){
+            // missing numeric argument -> error
+            errors.push({line: li+1, msg: `${coreUpper} requires a numeric argument.`});
+            rebuilt += escapeHtml(leadMatch) + `<span class="span-unknown">${escapeHtml(core)}</span>` + escapeHtml(trailMatch);
+            p++;
+            continue;
+          } else {
+            const leadN = nextTok.match(/^[^A-Za-z0-9_]*/)[0] || '';
+            const trailN = nextTok.match(/[^A-Za-z0-9_]*$/)[0] || '';
+            const coreN = nextTok.substring(leadN.length, nextTok.length - trailN.length);
+            if(/^\d+$/.test(coreN)){
+              const cls = getSpanClassForToken(coreUpper) || '';
+              rebuilt += escapeHtml(leadMatch) + (cls ? `<span class="${cls}">${escapeHtml(core)}</span>` : `<span>${escapeHtml(core)}</span>`);
+              const nextIndex = line.indexOf(nextTok, pos);
+              if(nextIndex > (startIndex + tok.length)){
+                const between = line.substring(startIndex + tok.length, nextIndex);
+                rebuilt += escapeHtml(between);
+              } else {
+                rebuilt += ' ';
+              }
+              rebuilt += escapeHtml(nextTok);
+              pos = line.indexOf(nextTok, pos) + nextTok.length;
+              p += 2;
+              continue;
+            } else {
+              errors.push({line: li+1, msg: `${coreUpper} requires a numeric argument.`});
+              rebuilt += escapeHtml(leadMatch) + `<span class="span-unknown">${escapeHtml(core)}</span>`;
+              rebuilt += ' ' + `<span class="span-unknown">${escapeHtml(nextTok)}</span>`;
+              pos = line.indexOf(nextTok, pos) + nextTok.length;
+              p += 2;
+              continue;
+            }
+          }
+        }
+
+        // For ALL other recognized commands (not DELAY), do NOT produce errors:
+        // simply highlight the command and continue. Any trailing args are allowed.
+        const cls = getSpanClassForToken(coreUpper) || '';
+        rebuilt += escapeHtml(leadMatch) + (cls ? `<span class="${cls}">${escapeHtml(core)}</span>` : `<span>${escapeHtml(core)}</span>`) + escapeHtml(trailMatch);
+        p++;
+        continue;
+      }
+
+      // not a command -> plain text (no error)
+      rebuilt += escapeHtml(tok);
+      p++;
+    } // end while parts
+
+    // append any trailing characters after last token
+    if(pos < line.length){
+      rebuilt += escapeHtml(line.substring(pos));
+    }
+
+    html += rebuilt;
+    if(li < lines.length - 1) html += '\n';
+  } // end lines
+
+  // update highlight layer & char count
+  highlighting.innerHTML = html.replace(/\n/g,'<br>');
+  charCount.textContent = `${text.length} characters`;
+
+  // show/hide errors (only possible for DELAY numeric issues)
+  if(errors.length > 0){
+    errorsPanel.style.display = 'block';
+    errorsList.innerHTML = '';
+    errors.forEach(e=>{
+      const d = document.createElement('div');
+      d.textContent = `Line ${e.line}: ${e.msg}`;
+      errorsList.appendChild(d);
+    });
+  } else {
+    errorsPanel.style.display = 'none';
+    errorsList.innerHTML = '';
+  }
+
+  // update line numbers
+  updateLineNumbers();
+}
+
+/* ---------- autocomplete (with EXIT) ---------- */
+function positionAutocompleteNearCaret(){
+  const rect = editor.getBoundingClientRect();
+  const style = window.getComputedStyle(editor);
+  const lineHeight = parseFloat(style.lineHeight) || 18;
+  const textBefore = editor.value.substring(0, editor.selectionStart);
+  const linesBefore = (textBefore.match(/\n/g) || []).length;
+  const top = Math.min(window.innerHeight - 80, rect.top + window.scrollY + 12 + linesBefore * lineHeight - editor.scrollTop);
+  const left = Math.max(8, rect.left + window.scrollX + 12);
+  autocomplete.style.top = `${top}px`;
+  autocomplete.style.left = `${left}px`;
+}
+
+let autocompleteItems = [];
+let autocompleteIndex = -1;
+
+function showAutocomplete(prefix){
+  const pref = prefix || '';
+  let matches = duckyCommands.filter(c=>c.toLowerCase().startsWith(pref.toLowerCase()));
+  // always append EXIT at the end
+  matches.push("EXIT");
+
+  autocomplete.innerHTML = '';
+  autocompleteItems = [];
+  autocompleteIndex = -1;
+
+  matches.forEach((m, i)=>{
+    const div = document.createElement('div');
+    div.className = 'autocomplete-item' + (m === "EXIT" ? ' exit-item' : '');
+    div.textContent = m;
+    div.dataset.cmd = m;
+    div.addEventListener('mousedown', (ev)=>{
+      ev.preventDefault();
+      if(m === "EXIT"){ hideAutocomplete(); return; }
+      selectAutocomplete(i);
+    });
+    autocomplete.appendChild(div);
+    autocompleteItems.push(div);
+  });
+
+  positionAutocompleteNearCaret();
+  autocomplete.style.display = 'block';
+  autocomplete.setAttribute('aria-expanded','true');
+
+  const rect = editor.getBoundingClientRect();
+  if(autocomplete.offsetWidth < 220) autocomplete.style.minWidth = Math.max(220, rect.width * 0.28) + 'px';
+}
+
+function hideAutocomplete(){
+  autocomplete.style.display = 'none';
+  autocomplete.setAttribute('aria-expanded','false');
+  autocompleteItems = [];
+  autocompleteIndex = -1;
+}
+
+function selectAutocomplete(index){
+  const item = autocompleteItems[index];
+  if(!item) return;
+  const cmd = item.dataset.cmd;
+  const pos = editor.selectionStart;
+  const textBefore = editor.value.substring(0, pos);
+  const currentWordMatch = textBefore.match(/(\S+)$/);
+  const currentWord = currentWordMatch ? currentWordMatch[0] : '';
+  const before = textBefore.substring(0, textBefore.length - currentWord.length);
+  const after = editor.value.substring(pos);
+  editor.value = before + cmd + ' ' + after;
+  const newPos = (before + cmd + ' ').length;
+  editor.selectionStart = editor.selectionEnd = newPos;
+  analyzeAndHighlight();
+  hideAutocomplete();
+  editor.focus();
+}
+
+/* ---------- populate commands list UI ---------- */
+function populateCommandsList(){
+  commandsList.innerHTML = '';
+  const colorMap = {
+    'span-rem':'var(--err-red)',
+    'span-delay':'var(--cmd-purple)',
+    'span-gui':'var(--cmd-blue)',
+    'span-shift':'var(--cmd-pink)',
+    'span-arrow':'var(--cmd-yellow)',
+    'span-f':'var(--cmd-fblue)'
+  };
+  duckyCommands.forEach(c=>{
+    const div = document.createElement('div');
+    div.className = 'command-item';
+    div.textContent = c;
+    const cls = getSpanClassForToken(c.toUpperCase());
+    if(cls && colorMap[cls]) div.style.color = colorMap[cls];
+    div.addEventListener('click', ()=>{
+      const pos = editor.selectionStart;
+      const before = editor.value.substring(0,pos);
+      const after = editor.value.substring(pos);
+      editor.value = before + c + ' ' + after;
+      editor.selectionStart = editor.selectionEnd = pos + c.length + 1;
+      analyzeAndHighlight();
+      editor.focus();
+    });
+    commandsList.appendChild(div);
+  });
+}
+
+/* ---------- line numbers ---------- */
+function updateLineNumbers(){
+  const lines = editor.value.split(/\r?\n/).length;
+  lineNumbers.innerHTML = Array.from({length: lines}, (_, i) => (i+1)).join('<br>');
+  lineNumbers.scrollTop = editor.scrollTop;
+}
+
+/* ---------- events ---------- */
+editor.addEventListener('input', ()=>{
+  analyzeAndHighlight();
+  status.textContent = 'Editing';
+  const pos = editor.selectionStart;
+  const before = editor.value.substring(0,pos);
+  const cur = (before.match(/(\S+)$/) || [''])[0];
+  if(cur.length>0) showAutocomplete(cur); else hideAutocomplete();
+});
+
+editor.addEventListener('keydown', (e)=>{
+  if(autocomplete.style.display === 'block'){
+    if(e.key === 'ArrowDown'){ e.preventDefault(); if(autocompleteIndex < autocompleteItems.length-1) autocompleteIndex++; updateAutocompleteActive(); return; }
+    if(e.key === 'ArrowUp'){ e.preventDefault(); if(autocompleteIndex > 0) autocompleteIndex--; updateAutocompleteActive(); return; }
+    if(e.key === 'Enter'){ if(autocompleteIndex === -1) autocompleteIndex = 0; if(autocompleteItems[autocompleteIndex]){ e.preventDefault(); selectAutocomplete(autocompleteIndex); return; } }
+    if(e.key === 'Escape'){ hideAutocomplete(); return; }
+  }
+  if(e.ctrlKey && e.key === ' '){ e.preventDefault(); const pos = editor.selectionStart; const before = editor.value.substring(0,pos); const cur = (before.match(/(\S+)$/) || [''])[0]; showAutocomplete(cur); }
+});
+
+function updateAutocompleteActive(){
+  autocompleteItems.forEach((it, idx)=>{
+    if(idx === autocompleteIndex) it.classList.add('active'); else it.classList.remove('active');
+    if(idx === autocompleteIndex){
+      const top = it.offsetTop;
+      const bottom = top + it.offsetHeight;
+      if(top < autocomplete.scrollTop) autocomplete.scrollTop = top;
+      else if(bottom > autocomplete.scrollTop + autocomplete.clientHeight) autocomplete.scrollTop = bottom - autocomplete.clientHeight;
+    }
+  });
+}
+
+/* clicking outside closes autocomplete */
+document.addEventListener('mousedown', (e)=>{
+  if(!autocomplete.contains(e.target) && e.target !== editor){
+    hideAutocomplete();
+  }
+});
+
+/* sync highlighting scroll with textarea */
+editor.addEventListener('scroll', ()=>{
+  highlighting.scrollTop = editor.scrollTop;
+  highlighting.scrollLeft = editor.scrollLeft;
+  lineNumbers.scrollTop = editor.scrollTop;
+});
+
+/* download */
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  let fname = document.getElementById('fileName').value || 'script.duck';
+  if(!fname.endsWith('.duck')) fname += '.duck';
+  const blob = new Blob([editor.value], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+  status.textContent = 'Downloaded';
+  setTimeout(()=>{ status.textContent = 'Ready'; }, 1200);
+});
+
+/* creator button */
+creatorBtn.addEventListener('click', ()=>{
+  creatorMsg.style.display = 'block';
+  setTimeout(()=>{ creatorMsg.style.display = 'none'; }, 2000);
+});
+
+/* window resize: reposition autocomplete if open */
+window.addEventListener('resize', ()=>{ if(autocomplete.style.display === 'block') positionAutocompleteNearCaret(); });
+
+/* ---------- init ---------- */
+function init(){
+  populateCommandsList();
+  const saved = localStorage.getItem('duckyscript_code');
+  if(saved) editor.value = saved;
+  analyzeAndHighlight();
+  updateLineNumbers();
+}
+init();
+
+</script>
+</body>
+</html>
